@@ -1846,16 +1846,33 @@
     const container = document.getElementById('challenges-container');
     if (!container) return;
 
-    container.innerHTML = challenges.map(c => {
-      const isDone = c.completed;
+    container.replaceChildren();
+    challenges.forEach(c => {
+      const isDone = Boolean(c.completed);
       const bg = isDone ? 'bg-punk-lime text-black border-2 border-white' : 'bg-punk-canvas text-black border-2 border-white';
       const statusText = isDone ? '🏆 DONE' : '⚡ ACTIVE';
-      return `<div class="px-3 py-1.5 ${bg} text-xs font-mono font-bold flex items-center gap-2 shadow-brutal-xs">
-        <span>${isDone ? '🎉' : '🎯'}</span>
-        <strong>${c.title}:</strong> ${c.current}
-        <span class="text-[9px] px-1.5 py-0.2 bg-black text-white ml-1 font-black">${statusText}</span>
-      </div>`;
-    }).join('');
+
+      const card = document.createElement('div');
+      card.className = `px-3 py-1.5 ${bg} text-xs font-mono font-bold flex items-center gap-2 shadow-brutal-xs`;
+
+      const iconSpan = document.createElement('span');
+      iconSpan.textContent = isDone ? '🎉' : '🎯';
+      card.appendChild(iconSpan);
+
+      const titleStrong = document.createElement('strong');
+      titleStrong.textContent = `${c.title}: `;
+      card.appendChild(titleStrong);
+
+      const currentText = document.createTextNode(String(c.current || ''));
+      card.appendChild(currentText);
+
+      const pill = document.createElement('span');
+      pill.className = 'text-[9px] px-1.5 py-0.2 bg-black text-white ml-1 font-black';
+      pill.textContent = statusText;
+      card.appendChild(pill);
+
+      container.appendChild(card);
+    });
   }
 
   function renderPriceSummary(items) {
@@ -1867,13 +1884,27 @@
     };
     const el = document.getElementById('price-summary');
     if (!el) return;
-    el.innerHTML = Object.entries(items).map(([name, item]) => {
+
+    el.replaceChildren();
+    Object.entries(items).forEach(([name, item]) => {
       const style = badgeStyles[name] || 'bg-white text-black';
-      return `<span class="inline-flex items-center gap-1.5 px-3 py-1 ${style} border-3 border-black shadow-brutal-xs text-xs font-mono font-black">
-        <span class="w-2.5 h-2.5 bg-black"></span>
-        ${name}: ${item.price.toFixed(1)}G <span class="opacity-75 text-[10px]">(${item.supply}u)</span>
-      </span>`;
-    }).join('');
+      const span = document.createElement('span');
+      span.className = `inline-flex items-center gap-1.5 px-3 py-1 ${style} border-3 border-black shadow-brutal-xs text-xs font-mono font-black`;
+
+      const dot = document.createElement('span');
+      dot.className = 'w-2.5 h-2.5 bg-black';
+      span.appendChild(dot);
+
+      const textNode = document.createTextNode(`${name}: ${Number(item.price).toFixed(1)}G `);
+      span.appendChild(textNode);
+
+      const supplySpan = document.createElement('span');
+      supplySpan.className = 'opacity-75 text-[10px]';
+      supplySpan.textContent = `(${item.supply}u)`;
+      span.appendChild(supplySpan);
+
+      el.appendChild(span);
+    });
   }
 
   function renderAgents(agents) {
@@ -1928,54 +1959,114 @@
       const actionName = action ? action.action : 'IDLE';
       const badgeStyle = actionBadgeStyles[actionName] || 'bg-black text-white';
 
-      const inv = Object.entries(agent.inventory || {})
-        .filter(([, q]) => q > 0)
-        .map(([i, q]) => {
+      el.replaceChildren();
+
+      const tape = document.createElement('div');
+      tape.className = `absolute ${cfg.tapeClass} w-20 h-5 masking-tape border border-black/20`;
+      el.appendChild(tape);
+
+      const mainDiv = document.createElement('div');
+
+      const headRow = document.createElement('div');
+      headRow.className = 'flex items-start justify-between gap-3 mb-3';
+
+      const infoLeft = document.createElement('div');
+      infoLeft.className = 'flex items-center gap-3';
+
+      const iconDiv = document.createElement('div');
+      iconDiv.className = `w-12 h-12 ${cfg.iconBg} border-3 border-black shadow-brutal-xs flex items-center justify-center text-2xl font-black ${cfg.iconRotate}`;
+      iconDiv.textContent = cfg.icon;
+      infoLeft.appendChild(iconDiv);
+
+      const titleDiv = document.createElement('div');
+      const h4 = document.createElement('h4');
+      h4.className = 'text-base font-display font-black uppercase tracking-wide';
+      h4.textContent = name;
+      const roleP = document.createElement('p');
+      roleP.className = 'text-[11px] font-mono font-bold text-black/80';
+      roleP.textContent = cfg.role;
+      titleDiv.appendChild(h4);
+      titleDiv.appendChild(roleP);
+      infoLeft.appendChild(titleDiv);
+
+      const actionBadge = document.createElement('span');
+      actionBadge.className = `px-2.5 py-1 text-[11px] font-mono font-black ${badgeStyle} border-2 border-black uppercase shadow-brutal-xs`;
+      actionBadge.textContent = actionName;
+
+      headRow.appendChild(infoLeft);
+      headRow.appendChild(actionBadge);
+      mainDiv.appendChild(headRow);
+
+      const statsGrid = document.createElement('div');
+      statsGrid.className = `grid grid-cols-2 gap-3 my-3 p-3 ${cfg.accentBg} border-3 border-black shadow-inner`;
+
+      const balCol = document.createElement('div');
+      const balLabel = document.createElement('span');
+      balLabel.className = 'text-[10px] font-mono font-black uppercase tracking-wider block text-black/70';
+      balLabel.textContent = 'Liquid Balance';
+      const balVal = document.createElement('span');
+      balVal.className = 'font-mono text-xl font-black text-black';
+      balVal.textContent = `${Number(agent.gold || 0).toFixed(1)} `;
+      const gPill = document.createElement('span');
+      gPill.className = 'text-xs font-bold text-black bg-punk-yellow px-1 border border-black';
+      gPill.textContent = 'G';
+      balVal.appendChild(gPill);
+      balCol.appendChild(balLabel);
+      balCol.appendChild(balVal);
+      statsGrid.appendChild(balCol);
+
+      const invCol = document.createElement('div');
+      const invLabel = document.createElement('span');
+      invLabel.className = 'text-[10px] font-mono font-black uppercase tracking-wider block text-black/70';
+      invLabel.textContent = 'Vault Inventory';
+      const invVal = document.createElement('div');
+      invVal.className = 'font-mono text-xs font-bold text-black flex flex-wrap gap-1 mt-1';
+
+      const invEntries = Object.entries(agent.inventory || {}).filter(([, q]) => q > 0);
+      if (invEntries.length === 0) {
+        const emptySpan = document.createElement('span');
+        emptySpan.className = 'text-black/50 italic';
+        emptySpan.textContent = 'Empty';
+        invVal.appendChild(emptySpan);
+      } else {
+        invEntries.forEach(([itemName, qty], idx) => {
           let badgeColor = 'bg-white';
-          if (i.includes('Health')) badgeColor = 'bg-punk-cyan';
-          else if (i.includes('Iron')) badgeColor = 'bg-punk-yellow';
-          else if (i.includes('Gem')) badgeColor = 'bg-punk-lime';
-          return `${i.split(' ')[0]}: <strong class="${badgeColor} px-1 border border-black">${q}</strong>`;
-        })
-        .join(' | ');
+          if (itemName.includes('Health')) badgeColor = 'bg-punk-cyan';
+          else if (itemName.includes('Iron')) badgeColor = 'bg-punk-yellow';
+          else if (itemName.includes('Gem')) badgeColor = 'bg-punk-lime';
 
-      const strategyText = action?.reasoning 
-        ? `“${action.reasoning}”` 
-        : "“Monitoring market depth and calculating expected equilibrium return...”";
+          const itemSpan = document.createElement('span');
+          itemSpan.textContent = `${itemName.split(' ')[0]}: `;
+          const qStrong = document.createElement('strong');
+          qStrong.className = `${badgeColor} px-1 border border-black`;
+          qStrong.textContent = String(qty);
+          itemSpan.appendChild(qStrong);
+          invVal.appendChild(itemSpan);
 
-      el.innerHTML = `
-        <div class="absolute ${cfg.tapeClass} w-20 h-5 masking-tape border border-black/20"></div>
-        <div>
-          <div class="flex items-start justify-between gap-3 mb-3">
-            <div class="flex items-center gap-3">
-              <div class="w-12 h-12 ${cfg.iconBg} border-3 border-black shadow-brutal-xs flex items-center justify-center text-2xl font-black ${cfg.iconRotate}">
-                ${cfg.icon}
-              </div>
-              <div>
-                <h4 class="text-base font-display font-black uppercase tracking-wide">${name}</h4>
-                <p class="text-[11px] font-mono font-bold text-black/80">${cfg.role}</p>
-              </div>
-            </div>
-            <span class="px-2.5 py-1 text-[11px] font-mono font-black ${badgeStyle} border-2 border-black uppercase shadow-brutal-xs">
-              ${actionName}
-            </span>
-          </div>
-          <div class="grid grid-cols-2 gap-3 my-3 p-3 ${cfg.accentBg} border-3 border-black shadow-inner">
-            <div>
-              <span class="text-[10px] font-mono font-black uppercase tracking-wider block text-black/70">Liquid Balance</span>
-              <span class="font-mono text-xl font-black text-black">${agent.gold.toFixed(1)} <span class="text-xs font-bold text-black bg-punk-yellow px-1 border border-black">G</span></span>
-            </div>
-            <div>
-              <span class="text-[10px] font-mono font-black uppercase tracking-wider block text-black/70">Vault Inventory</span>
-              <span class="font-mono text-xs font-bold text-black block mt-1">${inv || '<span class="text-black/50 italic">Empty</span>'}</span>
-            </div>
-          </div>
-        </div>
-        <div class="mt-2 text-xs font-mono font-bold text-black bg-punk-canvas p-3 border-3 border-black shadow-brutal-xs relative">
-          <span class="text-[10px] font-black uppercase ${cfg.quoteColor} block tracking-wider">STRATEGY VECTOR:</span>
-          ${strategyText}
-        </div>
-      `;
+          if (idx < invEntries.length - 1) {
+            const sep = document.createTextNode(' | ');
+            invVal.appendChild(sep);
+          }
+        });
+      }
+      invCol.appendChild(invLabel);
+      invCol.appendChild(invVal);
+      statsGrid.appendChild(invCol);
+      mainDiv.appendChild(statsGrid);
+      el.appendChild(mainDiv);
+
+      const stratBox = document.createElement('div');
+      stratBox.className = 'mt-2 text-xs font-mono font-bold text-black bg-punk-canvas p-3 border-3 border-black shadow-brutal-xs relative';
+      const stratLabel = document.createElement('span');
+      stratLabel.className = `text-[10px] font-black uppercase ${cfg.quoteColor} block tracking-wider`;
+      stratLabel.textContent = 'STRATEGY VECTOR:';
+      const stratContent = document.createElement('span');
+      stratContent.textContent = action?.reasoning
+        ? `“${action.reasoning}”`
+        : '“Monitoring market depth and calculating expected equilibrium return...”';
+      stratBox.appendChild(stratLabel);
+      stratBox.appendChild(stratContent);
+      el.appendChild(stratBox);
     });
   }
 
@@ -2024,30 +2115,76 @@
       }
 
       const style = actionStyles[t.action] || actionStyles.HOLD;
-      let detailHtml = '';
-      if (t.action === 'BUY') {
-        detailHtml = `Purchased ${t.quantity}x <strong class="bg-punk-cyan px-1 border border-black">${t.item}</strong> from order book for <strong class="underline font-black">${t.total_cost.toFixed(1)}G</strong>`;
-      } else if (t.action === 'SELL') {
-        detailHtml = `Offloaded ${t.quantity}x <strong class="bg-punk-lime px-1 border border-black">${t.item}</strong> at market price for <strong class="underline font-black">${t.total_cost.toFixed(1)}G</strong>`;
-      } else if (t.action === 'CRAFT') {
-        detailHtml = `Crafted ${t.quantity}x <strong class="bg-punk-yellow px-1 border border-black">${t.item}</strong> into reserve storage`;
-      } else {
-        detailHtml = `Reserved capital: Algorithmic valuation threshold not met this cycle`;
-      }
 
       const entry = document.createElement('div');
       entry.className = `p-3 ${style.wrapper} flex items-start gap-2.5`;
-      entry.innerHTML = `
-        <span class="px-2.5 py-1 text-[10px] font-black ${style.badge} shrink-0 shadow-brutal-xs">${t.action}</span>
-        <div class="flex-1 min-w-0">
-          <div class="flex justify-between items-baseline gap-2">
-            <span class="font-black text-black truncate uppercase">${t.agent_name}</span>
-            <span class="text-[10px] font-bold text-black/70">Tick ${t.tick}</span>
-          </div>
-          <p class="text-black font-semibold text-[11px] mt-1">${detailHtml}</p>
-        </div>
-        <span class="px-2 py-0.5 text-[9px] font-mono font-black bg-black text-punk-acid border border-black shrink-0 self-start">EXECUTED</span>
-      `;
+
+      const badge = document.createElement('span');
+      badge.className = `px-2.5 py-1 text-[10px] font-black ${style.badge} shrink-0 shadow-brutal-xs`;
+      badge.textContent = t.action;
+      entry.appendChild(badge);
+
+      const middle = document.createElement('div');
+      middle.className = 'flex-1 min-w-0';
+
+      const header = document.createElement('div');
+      header.className = 'flex justify-between items-baseline gap-2';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'font-black text-black truncate uppercase';
+      nameSpan.textContent = t.agent_name;
+
+      const tickSpan = document.createElement('span');
+      tickSpan.className = 'text-[10px] font-bold text-black/70';
+      tickSpan.textContent = `Tick ${t.tick}`;
+
+      header.appendChild(nameSpan);
+      header.appendChild(tickSpan);
+      middle.appendChild(header);
+
+      const detailP = document.createElement('p');
+      detailP.className = 'text-black font-semibold text-[11px] mt-1';
+
+      if (t.action === 'BUY') {
+        detailP.appendChild(document.createTextNode(`Purchased ${t.quantity}x `));
+        const itStrong = document.createElement('strong');
+        itStrong.className = 'bg-punk-cyan px-1 border border-black';
+        itStrong.textContent = String(t.item || '');
+        detailP.appendChild(itStrong);
+        detailP.appendChild(document.createTextNode(' from order book for '));
+        const costStrong = document.createElement('strong');
+        costStrong.className = 'underline font-black';
+        costStrong.textContent = `${Number(t.total_cost || 0).toFixed(1)}G`;
+        detailP.appendChild(costStrong);
+      } else if (t.action === 'SELL') {
+        detailP.appendChild(document.createTextNode(`Offloaded ${t.quantity}x `));
+        const itStrong = document.createElement('strong');
+        itStrong.className = 'bg-punk-lime px-1 border border-black';
+        itStrong.textContent = String(t.item || '');
+        detailP.appendChild(itStrong);
+        detailP.appendChild(document.createTextNode(' at market price for '));
+        const costStrong = document.createElement('strong');
+        costStrong.className = 'underline font-black';
+        costStrong.textContent = `${Number(t.total_cost || 0).toFixed(1)}G`;
+        detailP.appendChild(costStrong);
+      } else if (t.action === 'CRAFT') {
+        detailP.appendChild(document.createTextNode(`Crafted ${t.quantity}x `));
+        const itStrong = document.createElement('strong');
+        itStrong.className = 'bg-punk-yellow px-1 border border-black';
+        itStrong.textContent = String(t.item || '');
+        detailP.appendChild(itStrong);
+        detailP.appendChild(document.createTextNode(' into reserve storage'));
+      } else {
+        detailP.textContent = 'Reserved capital: Algorithmic valuation threshold not met this cycle';
+      }
+      middle.appendChild(detailP);
+      entry.appendChild(middle);
+
+      const statusPill = document.createElement('span');
+      statusPill.className = 'px-2 py-0.5 text-[9px] font-mono font-black bg-black text-punk-acid border border-black shrink-0 self-start';
+      statusPill.textContent = 'EXECUTED';
+      entry.appendChild(statusPill);
+
       log.prepend(entry);
     });
 
@@ -2074,19 +2211,34 @@
 
       const div = document.createElement('div');
       div.className = `p-4 ${bgClass}`;
-      div.innerHTML = `
-        <div class="flex items-center gap-2 font-display font-black text-xs uppercase mb-1.5">
-          <span class="text-base">${icon}</span>
-          <span>${a.type} DETECTED: ${a.name || a.headline}</span>
-        </div>
-        <p class="text-xs font-mono font-bold ${isCritical ? 'text-white' : 'text-black'} leading-relaxed">
-          ${a.headline}
-        </p>
-        <div class="mt-2.5 pt-2 border-t-2 ${isCritical ? 'border-white/60 text-white' : 'border-black text-black'} text-[10px] font-mono font-black flex items-center justify-between">
-          <span class="${threatPill} px-2 py-0.5">${threatText}</span>
-          <span>TICK ${a.tick || ''} // AI TELEMETRY</span>
-        </div>
-      `;
+
+      const headDiv = document.createElement('div');
+      headDiv.className = 'flex items-center gap-2 font-display font-black text-xs uppercase mb-1.5';
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'text-base';
+      iconSpan.textContent = icon;
+      const titleSpan = document.createElement('span');
+      titleSpan.textContent = `${a.type} DETECTED: ${a.name || a.headline}`;
+      headDiv.appendChild(iconSpan);
+      headDiv.appendChild(titleSpan);
+      div.appendChild(headDiv);
+
+      const bodyP = document.createElement('p');
+      bodyP.className = `text-xs font-mono font-bold ${isCritical ? 'text-white' : 'text-black'} leading-relaxed`;
+      bodyP.textContent = a.headline;
+      div.appendChild(bodyP);
+
+      const footDiv = document.createElement('div');
+      footDiv.className = `mt-2.5 pt-2 border-t-2 ${isCritical ? 'border-white/60 text-white' : 'border-black text-black'} text-[10px] font-mono font-black flex items-center justify-between`;
+      const pillSpan = document.createElement('span');
+      pillSpan.className = `${threatPill} px-2 py-0.5`;
+      pillSpan.textContent = threatText;
+      const tickSpan = document.createElement('span');
+      tickSpan.textContent = `TICK ${a.tick || ''} // AI TELEMETRY`;
+      footDiv.appendChild(pillSpan);
+      footDiv.appendChild(tickSpan);
+      div.appendChild(footDiv);
+
       feed.prepend(div);
     });
 
@@ -2142,15 +2294,34 @@
     // Vault inventory list
     const invEl = document.getElementById('player-inv-text');
     if (invEl) {
-      const invHtml = Object.entries(player.inventory || {})
-        .map(([item, qty]) => {
+      invEl.replaceChildren();
+      const entries = Object.entries(player.inventory || {}).filter(([, qty]) => qty > 0);
+      if (entries.length === 0) {
+        const emptySpan = document.createElement('span');
+        emptySpan.className = 'italic text-black/50';
+        emptySpan.textContent = 'Empty';
+        invEl.appendChild(emptySpan);
+      } else {
+        entries.forEach(([item, qty], idx) => {
           let badgeColor = 'bg-white';
           if (item.includes('Potion')) badgeColor = 'bg-punk-cyan';
           else if (item.includes('Sword')) badgeColor = 'bg-punk-yellow';
           else if (item.includes('Gem')) badgeColor = 'bg-punk-lime';
-          return `${item.split(' ')[0]}: <strong class="${badgeColor} px-1 border border-black">${qty}</strong>`;
-        }).join(' | ');
-      invEl.innerHTML = invHtml || '<span class="italic text-black/50">Empty</span>';
+
+          const itemSpan = document.createElement('span');
+          itemSpan.textContent = `${item.split(' ')[0]}: `;
+          const qStrong = document.createElement('strong');
+          qStrong.className = `${badgeColor} px-1 border border-black`;
+          qStrong.textContent = String(qty);
+          itemSpan.appendChild(qStrong);
+          invEl.appendChild(itemSpan);
+
+          if (idx < entries.length - 1) {
+            const sep = document.createTextNode(' | ');
+            invEl.appendChild(sep);
+          }
+        });
+      }
     }
 
     // Item panels
@@ -2351,7 +2522,27 @@
     const buyTotal = base + tax;
     const sellNet = base - tax;
 
-    previewEl.innerHTML = `<span>BUY: <strong class="text-black">${buyTotal.toFixed(1)}G</strong> | SELL: <strong class="text-black">${sellNet.toFixed(1)}G</strong> <span class="text-[9px] text-black/60">(${tax.toFixed(1)}G tax)</span></span>`;
+    previewEl.replaceChildren();
+    const span = document.createElement('span');
+
+    span.appendChild(document.createTextNode('BUY: '));
+    const buyStrong = document.createElement('strong');
+    buyStrong.className = 'text-black';
+    buyStrong.textContent = `${buyTotal.toFixed(1)}G`;
+    span.appendChild(buyStrong);
+
+    span.appendChild(document.createTextNode(' | SELL: '));
+    const sellStrong = document.createElement('strong');
+    sellStrong.className = 'text-black';
+    sellStrong.textContent = `${sellNet.toFixed(1)}G `;
+    span.appendChild(sellStrong);
+
+    const taxSpan = document.createElement('span');
+    taxSpan.className = 'text-[9px] text-black/60';
+    taxSpan.textContent = `(${tax.toFixed(1)}G tax)`;
+    span.appendChild(taxSpan);
+
+    previewEl.appendChild(span);
   }
 
   function setTradeQty(itemName, val) {
@@ -2492,11 +2683,12 @@
         priceHistory.labels.length = 0;
         ['Health Potion', 'Iron Sword', 'Raw Gem'].forEach(i => priceHistory[i].length = 0);
         priceChart.update();
-        document.getElementById('activity-log').innerHTML = '';
-        document.getElementById('news-feed').innerHTML = '';
+        document.getElementById('activity-log')?.replaceChildren();
+        document.getElementById('news-feed')?.replaceChildren();
         loggedTicks.clear();
         updateDashboard(d);
       });
+  }
   }
 
   function updateTaxLabel(v) {
