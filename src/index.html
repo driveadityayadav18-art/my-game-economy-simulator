@@ -2559,11 +2559,11 @@
     const previewEl = document.getElementById(`preview-${s}`);
     if (!qtyInput || !previewEl || !currentState || !currentState.items) return;
 
-    const qty = Math.max(1, parseInt(qtyInput.value) || 1);
+    const qty = Math.max(1, Math.min(10, parseInt(qtyInput.value) || 1));
     const item = currentState.items[itemName];
     if (!item) return;
 
-    const taxRate = currentState.tax_rate || 0.10;
+    const taxRate = currentState.tax_rate ?? 0.10;
     const base = item.price * qty;
     const tax = base * taxRate;
     const buyTotal = base + tax;
@@ -2598,15 +2598,16 @@
     if (!input) return;
 
     if (typeof val === 'number') {
-      input.value = val;
+      input.value = Math.max(1, Math.min(10, val));
     } else if (val === 'max_buy') {
       const player = getPlayerAgent(currentState?.agents);
       const item = currentState?.items?.[itemName];
       if (player && item) {
-        const taxRate = currentState.tax_rate || 0.10;
+        const taxRate = currentState.tax_rate ?? 0.10;
         const unitCostWithTax = item.price * (1 + taxRate);
         const maxCanBuy = Math.floor(player.gold / unitCostWithTax);
-        input.value = Math.max(1, Math.min(item.supply, maxCanBuy));
+        // Max order quantity per transaction is capped between 1 and 10
+        input.value = Math.max(1, Math.min(10, Math.min(item.supply, maxCanBuy)));
       }
     }
     updateTradePreview(itemName);
@@ -2627,7 +2628,9 @@
   function executePlayerTrade(action, item) {
     const s = getSuffix(item);
     const input = document.getElementById(`qty-${s}`);
-    const quantity = Math.max(1, parseInt(input?.value) || 1);
+    const rawQty = parseInt(input?.value) || 1;
+    const quantity = Math.max(1, Math.min(10, rawQty));
+    if (input) input.value = quantity;
 
     fetch('/player/trade', {
       method: 'POST',
@@ -2649,8 +2652,12 @@
           updateDashboard(data.state);
         }
       } else {
-        showPlayerToast(`⚠️ Trade Rejected: ${data.message}`, false);
+        showPlayerToast(`⚠️ Trade Rejected: ${data.message || data.detail || 'Insufficient stock or funds'}`, false);
         triggerPlazaSpeech('player', `TRADE DENIED!`, 'alert');
+        if (data.state) {
+          currentState = data.state;
+          updateDashboard(data.state);
+        }
       }
     })
     .catch(err => {
@@ -2708,18 +2715,51 @@
   // Simulation Controls & API
   // ============================================================
   function startSim() {
-    fetch('/simulation/start', { method: 'POST' });
+    fetch('/simulation/start', { method: 'POST' })
+      .then(async r => {
+        const data = await r.json();
+        if (data.state) {
+          currentState = data.state;
+          updateDashboard(data.state);
+        } else {
+          fetchHttpState();
+        }
+        showPlayerToast('▶ Simulation engine running.', true);
+      })
+      .catch(() => {
+        fetchHttpState();
+      });
   }
 
   function stopSim() {
-    fetch('/simulation/stop', { method: 'POST' });
+    fetch('/simulation/stop', { method: 'POST' })
+      .then(async r => {
+        const data = await r.json();
+        if (data.state) {
+          currentState = data.state;
+          updateDashboard(data.state);
+        } else {
+          fetchHttpState();
+        }
+        showPlayerToast('■ Simulation loop halted.', true);
+      })
+      .catch(() => {
+        fetchHttpState();
+      });
   }
 
   function manualTick() {
     fetch('/simulation/tick', { method: 'POST' })
       .then(r => r.json())
       .then(d => {
-        updateDashboard(d.state);
+        if (d.state) {
+          currentState = d.state;
+          updateDashboard(d.state);
+          showPlayerToast(`⏭ Step complete: ${d.message}`, true);
+        }
+      })
+      .catch(err => {
+        showPlayerToast(`❌ Tick Step Error: ${err.message}`, false);
       });
   }
 
@@ -2733,9 +2773,14 @@
         document.getElementById('activity-log')?.replaceChildren();
         document.getElementById('news-feed')?.replaceChildren();
         loggedTicks.clear();
-        updateDashboard(d);
+        const state = d.state || d;
+        currentState = state;
+        updateDashboard(state);
+        showPlayerToast('↺ Economy reset to initial defaults.', true);
+      })
+      .catch(err => {
+        showPlayerToast(`❌ Reset Failed: ${err.message}`, false);
       });
-  }
   }
 
   function updateTaxLabel(v) {
@@ -2749,6 +2794,17 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tax_rate: rate }),
+    })
+    .then(async r => {
+      const d = await r.json();
+      if (d.state) {
+        currentState = d.state;
+        updateDashboard(d.state);
+      }
+      showPlayerToast(`🏛️ Macro Tariff set to ${v}%`, true);
+    })
+    .catch(err => {
+      showPlayerToast(`❌ Tax Update Error: ${err.message}`, false);
     });
   }
 
@@ -2759,7 +2815,23 @@
 
   function setSpeed(v) {
     const interval = parseFloat(v);
-    sendWS({ action: 'set_speed', interval });
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: 'set_speed', interval }));
+    }
+    fetch('/simulation/speed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval: interval }),
+    })
+    .then(async r => {
+      const d = await r.json();
+      if (d.state) {
+        currentState = d.state;
+        updateDashboard(d.state);
+      }
+      showPlayerToast(`⏱️ Tick cycle speed set to ${interval.toFixed(1)}s`, true);
+    })
+    .catch(() => {});
   }
 
   function triggerEvent(eventName) {
@@ -2767,12 +2839,44 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event: eventName }),
+    })
+    .then(async r => {
+      const d = await r.json();
+      if (r.ok) {
+        showPlayerToast(`💥 ${d.message}`, true);
+        const evLower = eventName.toLowerCase();
+        if (evLower.includes('dragon')) {
+          triggerPlazaSpeech('player', 'DRAGON ATTACK!', 'alert');
+          triggerPlazaSpeech('boran', 'TO ARMS!', 'alert');
+        } else if (evLower.includes('gold')) {
+          triggerPlazaSpeech('garrick', 'GOLD RUSH!! 💰', 'gold');
+        } else if (evLower.includes('crash')) {
+          triggerPlazaSpeech('cora', 'PRICES CRASHING!', 'alert');
+        } else if (evLower.includes('trade')) {
+          triggerPlazaSpeech('player', 'TRADE EMBARGO!', 'alert');
+        } else if (evLower.includes('black')) {
+          triggerPlazaSpeech('player', 'BLACK MARKET OPEN!', 'syndicate');
+        }
+
+        if (d.state) {
+          currentState = d.state;
+          updateDashboard(d.state);
+        } else {
+          fetchHttpState();
+        }
+      } else {
+        showPlayerToast(`❌ Event Failed: ${d.detail || d.message}`, false);
+      }
+    })
+    .catch(err => {
+      showPlayerToast(`❌ Event Error: ${err.message}`, false);
     });
   }
 
   // ============================================================
   // Initialize
   // ============================================================
+  fetchHttpState();
   connect();
 
   setInterval(() => {

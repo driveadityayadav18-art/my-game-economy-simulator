@@ -31,6 +31,7 @@ from src.models import (
     EconomyState,
     PolicyEventRequest,
     PolicyTaxRequest,
+    PolicySpeedRequest,
     SimulationStatus,
     PlayerTradeRequest,
     QuestRequest,
@@ -261,6 +262,9 @@ async def _handle_ws_message(msg: dict):
         rate = float(msg.get("tax_rate", sim_module.state.tax_rate))
         sim_module.state.tax_rate = max(0.0, min(0.80, round(rate, 4)))
         logger.info("WS: Tax rate set to %.2f%%", sim_module.state.tax_rate * 100)
+        payload = _state_snapshot()
+        payload["anomalies"] = check_anomalies(sim_module.state)
+        await manager.broadcast(payload)
     elif action == "trigger_event":
         event = msg.get("event", "").lower()
         if "dragon" in event:
@@ -278,15 +282,27 @@ async def _handle_ws_message(msg: dict):
         elif "black" in event:
             apply_black_market(sim_module.state)
             logger.info("WS: Black Market triggered")
+        payload = _state_snapshot()
+        payload["anomalies"] = check_anomalies(sim_module.state)
+        await manager.broadcast(payload)
     elif action == "start":
         sim_module.start_loop()
+        payload = _state_snapshot()
+        payload["anomalies"] = check_anomalies(sim_module.state)
+        await manager.broadcast(payload)
     elif action == "stop":
         sim_module.stop_loop()
+        payload = _state_snapshot()
+        payload["anomalies"] = check_anomalies(sim_module.state)
+        await manager.broadcast(payload)
     elif action == "set_speed":
         interval = float(msg.get("interval", 4.0))
         # Clamp between 0.5s (fast demo) and 10s (slow)
         settings.SIMULATION_TICK_INTERVAL = max(0.5, min(10.0, round(interval, 1)))
         logger.info("WS: Tick speed set to %.1fs", settings.SIMULATION_TICK_INTERVAL)
+        payload = _state_snapshot()
+        payload["anomalies"] = check_anomalies(sim_module.state)
+        await manager.broadcast(payload)
     elif action == "player_trade":
         player_name = msg.get("player_name", "You (Merchant)")
         item = msg.get("item")
@@ -357,10 +373,12 @@ async def _handle_ws_message(msg: dict):
 async def manual_tick() -> JSONResponse:
     """Steps a single simulation tick manually."""
     records = await sim_module.run_tick()
+    payload = _state_snapshot()
+    payload["anomalies"] = check_anomalies(sim_module.state)
     return JSONResponse(content={
         "message": f"Tick #{sim_module.state.tick - 1} completed.",
         "transactions": [r.model_dump() for r in records],
-        "state": _state_snapshot(),
+        "state": payload,
     })
 
 
@@ -368,10 +386,14 @@ async def manual_tick() -> JSONResponse:
 async def start_simulation() -> SimulationStatus:
     """Starts the continuous background tick loop."""
     started = sim_module.start_loop()
+    payload = _state_snapshot()
+    payload["anomalies"] = check_anomalies(sim_module.state)
+    await manager.broadcast(payload)
     return SimulationStatus(
         running=sim_module.state.running,
         tick=sim_module.state.tick,
         message="Simulation loop started." if started else "Loop already running.",
+        state=payload,
     )
 
 
@@ -379,10 +401,14 @@ async def start_simulation() -> SimulationStatus:
 async def stop_simulation() -> SimulationStatus:
     """Stops the background tick loop."""
     stopped = sim_module.stop_loop()
+    payload = _state_snapshot()
+    payload["anomalies"] = check_anomalies(sim_module.state)
+    await manager.broadcast(payload)
     return SimulationStatus(
         running=sim_module.state.running,
         tick=sim_module.state.tick,
         message="Simulation loop stopped." if stopped else "Loop was not running.",
+        state=payload,
     )
 
 
@@ -390,10 +416,31 @@ async def stop_simulation() -> SimulationStatus:
 async def reset_simulation() -> SimulationStatus:
     """Resets economy to initial defaults: stops loop, tick → 0, agents/prices restored."""
     sim_module.reset_state()
+    payload = _state_snapshot()
+    payload["anomalies"] = check_anomalies(sim_module.state)
+    await manager.broadcast(payload)
     return SimulationStatus(
         running=sim_module.state.running,
         tick=sim_module.state.tick,
         message="Economy reset to initial defaults.",
+        state=payload,
+    )
+
+
+@app.post("/simulation/speed", response_model=SimulationStatus)
+async def set_speed_endpoint(body: PolicySpeedRequest) -> SimulationStatus:
+    """Updates simulation tick interval in seconds (0.5s to 10.0s)."""
+    interval = max(0.5, min(10.0, round(body.interval, 1)))
+    settings.SIMULATION_TICK_INTERVAL = interval
+    logger.info("Tick speed updated to %.1fs", interval)
+    payload = _state_snapshot()
+    payload["anomalies"] = check_anomalies(sim_module.state)
+    await manager.broadcast(payload)
+    return SimulationStatus(
+        running=sim_module.state.running,
+        tick=sim_module.state.tick,
+        message=f"Tick speed set to {interval:.1f}s.",
+        state=payload,
     )
 
 
@@ -403,10 +450,14 @@ async def update_tax(body: PolicyTaxRequest) -> SimulationStatus:
     new_rate = body.clamped_rate()
     sim_module.state.tax_rate = new_rate
     logger.info("Tax rate updated to %.2f%%", new_rate * 100)
+    payload = _state_snapshot()
+    payload["anomalies"] = check_anomalies(sim_module.state)
+    await manager.broadcast(payload)
     return SimulationStatus(
         running=sim_module.state.running,
         tick=sim_module.state.tick,
         message=f"Tax rate set to {new_rate * 100:.1f}%.",
+        state=payload,
     )
 
 
@@ -441,11 +492,16 @@ async def trigger_event(body: PolicyEventRequest) -> SimulationStatus:
             detail=f"Unknown event '{body.event}'. Valid: 'Dragon Attack', 'Gold Rush', 'Trade War', 'Market Crash', 'Black Market'.",
         )
 
+    payload = _state_snapshot()
+    payload["anomalies"] = check_anomalies(sim_module.state)
+    await manager.broadcast(payload)
     return SimulationStatus(
         running=sim_module.state.running,
         tick=sim_module.state.tick,
         message=msg,
+        state=payload,
     )
+
 
 
 @app.post("/player/trade")
