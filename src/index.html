@@ -1699,30 +1699,77 @@
   });
 
   // ============================================================
-  // WebSocket Connection
+  // WebSocket Connection & Serverless HTTP Polling Fallback
   // ============================================================
+  let wsFailCount = 0;
+  let pollInterval = null;
+
+  function fetchHttpState() {
+    fetch('/state')
+      .then(r => r.json())
+      .then(data => {
+        if (data) {
+          currentState = data;
+          updateDashboard(data);
+          setStatus(true, 'ONLINE (HTTP)');
+        }
+      })
+      .catch(() => {
+        setStatus(false, 'OFFLINE');
+      });
+  }
+
+  function startHttpPolling() {
+    if (!pollInterval) {
+      fetchHttpState();
+      pollInterval = setInterval(fetchHttpState, 2500);
+    }
+  }
+
   function connect() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/ws`);
+    // If running in an environment without WebSocket support after repeated retries, fallback to polling
+    if (wsFailCount >= 2) {
+      startHttpPolling();
+      return;
+    }
 
-    ws.onopen = () => {
-      setStatus(true);
-      clearTimeout(wsReconnectTimer);
-    };
+    try {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(`${proto}://${location.host}/ws`);
 
-    ws.onclose = () => {
-      setStatus(false);
-      wsReconnectTimer = setTimeout(connect, 3000);
-    };
+      ws.onopen = () => {
+        wsFailCount = 0;
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+        setStatus(true, 'LIVE (WS)');
+        clearTimeout(wsReconnectTimer);
+      };
 
-    ws.onerror = () => ws.close();
+      ws.onclose = () => {
+        wsFailCount++;
+        if (wsFailCount >= 2) {
+          startHttpPolling();
+        } else {
+          setStatus(false, 'RECONNECTING…');
+          wsReconnectTimer = setTimeout(connect, 2000);
+        }
+      };
 
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.type === 'ping') return;
-      currentState = data;
-      updateDashboard(data);
-    };
+      ws.onerror = () => {
+        if (ws) ws.close();
+      };
+
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'ping') return;
+        currentState = data;
+        updateDashboard(data);
+      };
+    } catch (err) {
+      startHttpPolling();
+    }
   }
 
   function sendWS(msg) {
@@ -1736,16 +1783,16 @@
   // ============================================================
   // UI Update Handlers
   // ============================================================
-  function setStatus(connected) {
+  function setStatus(connected, label = 'CONNECTED') {
     const dot  = document.getElementById('status-dot');
     const text = document.getElementById('status-text');
     if (!dot || !text) return;
     if (connected) {
       dot.className = 'w-4 h-4 bg-black border-2 border-white animate-ping inline-block';
-      text.textContent = 'CONNECTED';
+      text.textContent = label;
     } else {
       dot.className = 'w-4 h-4 bg-punk-magenta border-2 border-black inline-block';
-      text.textContent = 'RECONNECTING…';
+      text.textContent = label;
     }
   }
 

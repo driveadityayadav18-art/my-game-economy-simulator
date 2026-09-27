@@ -342,6 +342,37 @@ python -m pytest
 
 ---
 
+## Deployment Guide
+
+### Option 1: Deploy on Vercel (Zero-Config Serverless)
+The repository includes `vercel.json` and `api/index.py` configured for instant Vercel deployment:
+1. Go to [vercel.com](https://vercel.com) and sign in with GitHub.
+2. Click **Add New** $\rightarrow$ **Project** and import `driveadityayadav18-art/my-game-economy-simulator`.
+3. Leave Framework Preset as **Other** (Vercel automatically detects `@vercel/python`).
+4. Click **Deploy**.
+5. Your application will be live at `https://your-project.vercel.app`.
+
+*(Note: On serverless platforms like Vercel, the frontend automatically uses high-efficiency HTTP polling fallback to ensure real-time responsiveness without persistent WebSocket server overhead).*
+
+### Option 2: Deploy on Render / Railway (Persistent WebSockets)
+For persistent WebSocket connections and continuous background tick loops:
+1. Go to [render.com](https://render.com) and create a **New Web Service**.
+2. Connect your GitHub repository.
+3. Build Command: `pip install -r requirements.txt`
+4. Start Command: `uvicorn src.main:app --host 0.0.0.0 --port $PORT`
+5. Click **Create Web Service**.
+
+### Option 3: Docker
+```bash
+# Build Docker image
+docker build -t game-economy-simulator .
+
+# Run container
+docker run -p 8000:8000 game-economy-simulator
+```
+
+---
+
 ## Known Limitations & Future Improvements
 
 - **In-Memory Persistence:** Current simulation state is held in memory and resets when the server process terminates. Future versions will support persistent storage with SQLite or PostgreSQL.
