@@ -13,8 +13,9 @@ from typing import Any, Dict, Optional, Tuple
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-# Load variables from local .env if present
-load_dotenv()
+# Load variables from local .env.local and .env if present
+load_dotenv(".env.local", override=True)
+load_dotenv(".env", override=False)
 
 
 class Settings(BaseModel):
@@ -77,7 +78,7 @@ class Settings(BaseModel):
         description="Google Gemini API key",
     )
     LLM_PROVIDER: str = Field(
-        default_factory=lambda: os.getenv("LLM_PROVIDER", "simulated"),
+        default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini" if os.getenv("GEMINI_API_KEY") else "simulated"),
         description="Active LLM provider: openai, anthropic, gemini, or simulated",
     )
     DEFAULT_LLM_MODEL: str = Field(

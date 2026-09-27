@@ -114,14 +114,21 @@ async def _call_anthropic(system: str, user: str) -> str:
 
 async def _call_gemini(system: str, user: str) -> str:
     import httpx
-    model = "gemini-1.5-flash"
+    model = "gemini-2.5-flash"
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         f"?key={settings.GEMINI_API_KEY}"
     )
     payload = {
         "contents": [{"role": "user", "parts": [{"text": system + "\n" + DECISION_FORMAT_INSTRUCTION + "\n\n" + user}]}],
-        "generationConfig": {"maxOutputTokens": 200, "temperature": 0.7},
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 300,
+            "temperature": 0.7,
+            "thinkingConfig": {
+                "thinkingBudget": 0,
+            },
+        },
     }
     async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
         resp = await client.post(url, json=payload)
