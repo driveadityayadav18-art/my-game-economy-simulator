@@ -1,0 +1,91 @@
+--- a/src/market.py
++++ b/src/market.py
+@@ -153,7 +153,8 @@ def execute_transaction(
+             status="REJECTED",
+             reason=f"Agent '{agent_name}' does not exist in state.",
+         )
+-        state.recent_transactions.append(record)
++        if record not in state.recent_transactions:
++            state.recent_transactions.append(record)
+         return record
+ 
+     agent = state.agents[agent_name]
+@@ -173,7 +174,8 @@ def execute_transaction(
+             status="EXECUTED",
+             reason=decision.reasoning or "HOLD action executed.",
+         )
+-        state.recent_transactions.append(record)
++        if record not in state.recent_transactions:
++            state.recent_transactions.append(record)
+         return record
+ 
+     # Validate item existence
+@@ -190,7 +192,8 @@ def execute_transaction(
+             status="REJECTED",
+             reason=f"Item '{decision.item}' not found in market catalog.",
+         )
+-        state.recent_transactions.append(record)
++        if record not in state.recent_transactions:
++            state.recent_transactions.append(record)
+         return record
+ 
+     item_state = state.items[decision.item]
+@@ -215,7 +218,8 @@ def execute_transaction(
+             status="REJECTED",
+             reason=validation_msg,
+         )
+-        state.recent_transactions.append(record)
++        if record not in state.recent_transactions:
++            state.recent_transactions.append(record)
+         return record
+ 
+     # Atomic Execution for BUY
+@@ -245,16 +249,19 @@ def execute_transaction(
+             status="EXECUTED",
+             reason=decision.reasoning or "BUY order executed successfully.",
+         )
+-        state.recent_transactions.append(record)
++        if record not in state.recent_transactions:
++            state.recent_transactions.append(record)
+         return record
+ 
+     # Atomic Execution for SELL
+     if decision.action == ActionType.SELL:
+         unit_price = item_state.price
+-        revenue = round(unit_price * float(decision.quantity), 2)
++        gross_revenue = round(unit_price * float(decision.quantity), 2)
++        tax = calculate_tax(unit_price, decision.quantity, state.tax_rate)
++        net_revenue = round(gross_revenue - tax, 2)
+ 
+         # Mutate agent
+-        agent.gold = round(agent.gold + revenue, 2)
++        agent.gold = round(agent.gold + net_revenue, 2)
+         agent.inventory[decision.item] = (
+             agent.inventory.get(decision.item, 0) - decision.quantity
+         )
+@@ -269,12 +276,13 @@ def execute_transaction(
+             item=decision.item,
+             quantity=decision.quantity,
+             unit_price=unit_price,
+-            tax_paid=0.0,
+-            total_cost=revenue,
++            tax_paid=tax,
++            total_cost=gross_revenue,
+             status="EXECUTED",
+             reason=decision.reasoning or "SELL order executed successfully.",
+         )
+-        state.recent_transactions.append(record)
++        if record not in state.recent_transactions:
++            state.recent_transactions.append(record)
+         return record
+ 
+     # Fallback rejection for unhandled action
+@@ -290,6 +298,7 @@ def execute_transaction(
+         status="REJECTED",
+         reason=f"Unhandled action '{decision.action}'.",
+     )
+-    state.recent_transactions.append(record)
++    if record not in state.recent_transactions:
++        state.recent_transactions.append(record)
+     return record
+ 

@@ -1,0 +1,10 @@
+--- a/tests/test_market.py
++++ b/tests/test_market.py
+@@ -323,5 +323,6 @@ class TestAtomicExecution:
+ 
+         assert record.status == "EXECUTED"
+         assert record.total_cost == 30.0
+-        assert initial_state.agents["Garrick"].gold == 180.0  # 150.0 + 30.0
++        assert record.tax_paid == 3.0
++        assert initial_state.agents["Garrick"].gold == 177.0  # 150.0 + 27.0 (30.0 - 3.0 tax)
+         assert initial_state.agents["Garrick"].inventory["Iron Sword"] == 0  # 1 - 1
