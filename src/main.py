@@ -171,6 +171,8 @@ def _state_snapshot() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
+@app.get("/api/index")
+@app.get("/api")
 async def health() -> Dict[str, str]:
     return {"status": "ok", "service": "game-economy-simulator"}
 
