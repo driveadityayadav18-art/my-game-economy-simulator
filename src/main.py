@@ -20,6 +20,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Set
+from urllib.parse import parse_qsl, urlencode
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -98,6 +99,41 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
+class VercelFunctionPathMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        prefix = "/api/index"
+        if scope["type"] in {"http", "websocket"}:
+            path = scope.get("path", "")
+            query = scope.get("query_string", b"").decode("ascii")
+            query_items = parse_qsl(query, keep_blank_values=True)
+            vercel_path = next(
+                (value for key, value in query_items if key == "__vercel_path"),
+                None,
+            )
+            if vercel_path is not None:
+                path = vercel_path if vercel_path.startswith("/") else f"/{vercel_path}"
+                query_items = [
+                    (key, value) for key, value in query_items if key != "__vercel_path"
+                ]
+                scope = {
+                    **scope,
+                    "path": path,
+                    "raw_path": path.encode("utf-8"),
+                    "query_string": urlencode(query_items).encode("ascii"),
+                }
+            elif path == prefix:
+                path = "/"
+            elif path.startswith(prefix + "/"):
+                path = path[len(prefix):]
+            if path != scope.get("path"):
+                scope = {**scope, "path": path, "raw_path": path.encode("utf-8")}
+        await self.app(scope, receive, send)
+
+
 # Patch simulation run_tick to broadcast after each tick
 _original_run_tick = sim_module.run_tick
 
@@ -131,6 +167,7 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+app.add_middleware(VercelFunctionPathMiddleware)
 
 
 # ---------------------------------------------------------------------------
