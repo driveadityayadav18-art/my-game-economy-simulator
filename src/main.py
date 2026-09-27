@@ -23,7 +23,7 @@ from typing import Any, Dict, Set
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pathlib import Path
 
 from src.models import (
@@ -180,7 +180,7 @@ async def serve_dashboard():
     """Serve the Game Master dashboard UI."""
     ui_path = Path(__file__).parent / "index.html"
     if ui_path.exists():
-        return FileResponse(str(ui_path), media_type="text/html")
+        return HTMLResponse(content=ui_path.read_text(encoding="utf-8"))
     return JSONResponse({"error": "Dashboard not found. Run the server from project root."}, status_code=404)
 
 
