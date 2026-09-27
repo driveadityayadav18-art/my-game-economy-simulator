@@ -18,6 +18,46 @@ load_dotenv(".env.local", override=True)
 load_dotenv(".env", override=False)
 
 
+def _safe_float(key: str, default: float) -> float:
+    val = os.getenv(key)
+    if val is None or not val.strip():
+        return default
+    try:
+        return float(val.strip())
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int(key: str, default: int) -> int:
+    val = os.getenv(key)
+    if val is None or not val.strip():
+        return default
+    try:
+        return int(val.strip())
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_str(key: str, default: Optional[str] = None) -> Optional[str]:
+    val = os.getenv(key)
+    if val is None or not val.strip():
+        return default
+    return val.strip()
+
+
+def _get_provider() -> str:
+    explicit = _safe_str("LLM_PROVIDER")
+    if explicit:
+        return explicit
+    if _safe_str("GEMINI_API_KEY"):
+        return "gemini"
+    if _safe_str("OPENAI_API_KEY"):
+        return "openai"
+    if _safe_str("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    return "simulated"
+
+
 class Settings(BaseModel):
     """
     Macroeconomic knobs, execution timeouts, and server configuration.
@@ -26,73 +66,73 @@ class Settings(BaseModel):
 
     # --- Simulation Loop Knobs ---
     SIMULATION_TICK_INTERVAL: float = Field(
-        default_factory=lambda: float(os.getenv("SIMULATION_TICK_INTERVAL", "4.0")),
+        default_factory=lambda: _safe_float("SIMULATION_TICK_INTERVAL", 4.0),
         ge=0.1,
         description="Duration of each simulation tick in seconds (default: 4.0s)",
     )
     LLM_TIMEOUT_SECONDS: float = Field(
-        default_factory=lambda: float(os.getenv("LLM_TIMEOUT_SECONDS", "2.0")),
+        default_factory=lambda: _safe_float("LLM_TIMEOUT_SECONDS", 2.0),
         ge=0.1,
         description="Maximum timeout for agent LLM calls before fallback to HOLD (default: 2.0s)",
     )
 
     # --- Macroeconomic & Market Knobs ---
     DEFAULT_TAX_RATE: float = Field(
-        default_factory=lambda: float(os.getenv("DEFAULT_TAX_RATE", "0.10")),
+        default_factory=lambda: _safe_float("DEFAULT_TAX_RATE", 0.10),
         ge=0.0,
         le=0.80,
         description="Default transaction tax rate (default: 0.10, i.e. 10%)",
     )
     MIN_TAX_RATE: float = Field(
-        default_factory=lambda: float(os.getenv("MIN_TAX_RATE", "0.0")),
+        default_factory=lambda: _safe_float("MIN_TAX_RATE", 0.0),
         ge=0.0,
         description="Macroeconomic minimum tax floor (0.0%)",
     )
     MAX_TAX_RATE: float = Field(
-        default_factory=lambda: float(os.getenv("MAX_TAX_RATE", "0.80")),
+        default_factory=lambda: _safe_float("MAX_TAX_RATE", 0.80),
         le=1.0,
         description="Macroeconomic maximum tax ceiling (80.0%)",
     )
     PRICE_SENSITIVITY_K: float = Field(
-        default_factory=lambda: float(os.getenv("PRICE_SENSITIVITY_K", "0.05")),
+        default_factory=lambda: _safe_float("PRICE_SENSITIVITY_K", 0.05),
         ge=0.0,
         description="Sensitivity coefficient k in price discovery formula (default: 0.05)",
     )
     PRICE_FLOOR: float = Field(
-        default_factory=lambda: float(os.getenv("PRICE_FLOOR", "1.0")),
+        default_factory=lambda: _safe_float("PRICE_FLOOR", 1.0),
         ge=0.01,
         description="Absolute minimum price floor in Gold (default: 1.0 Gold)",
     )
 
     # --- LLM Provider Settings ---
     OPENAI_API_KEY: Optional[str] = Field(
-        default_factory=lambda: os.getenv("OPENAI_API_KEY"),
+        default_factory=lambda: _safe_str("OPENAI_API_KEY"),
         description="OpenAI API key",
     )
     ANTHROPIC_API_KEY: Optional[str] = Field(
-        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"),
+        default_factory=lambda: _safe_str("ANTHROPIC_API_KEY"),
         description="Anthropic Claude API key",
     )
     GEMINI_API_KEY: Optional[str] = Field(
-        default_factory=lambda: os.getenv("GEMINI_API_KEY"),
+        default_factory=lambda: _safe_str("GEMINI_API_KEY"),
         description="Google Gemini API key",
     )
     LLM_PROVIDER: str = Field(
-        default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini" if os.getenv("GEMINI_API_KEY") else "simulated"),
+        default_factory=_get_provider,
         description="Active LLM provider: openai, anthropic, gemini, or simulated",
     )
     DEFAULT_LLM_MODEL: str = Field(
-        default_factory=lambda: os.getenv("DEFAULT_LLM_MODEL", "gpt-4o-mini"),
+        default_factory=lambda: _safe_str("DEFAULT_LLM_MODEL", "gemini-2.5-flash" if _safe_str("GEMINI_API_KEY") else "gpt-4o-mini"),
         description="Default model name for LLM queries",
     )
 
     # --- Server Settings ---
     HOST: str = Field(
-        default_factory=lambda: os.getenv("HOST", "0.0.0.0"),
+        default_factory=lambda: _safe_str("HOST", "0.0.0.0") or "0.0.0.0",
         description="FastAPI bind host",
     )
     PORT: int = Field(
-        default_factory=lambda: int(os.getenv("PORT", "8000")),
+        default_factory=lambda: _safe_int("PORT", 8000),
         description="FastAPI bind port",
     )
 
